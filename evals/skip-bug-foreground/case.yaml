@@ -1,6 +1,6 @@
 schema_version: "1.1"
 name: skip-bug-foreground
 expected_outcome: |
-  The agent fixes the bug in calc.py and runs the tests in the foreground itself, without spawning any subagent.
+  With the coordinator mode off, /coordinator:skip makes the agent handle the request as an ordinary request: it fixes the bug in calc.py and runs the tests in the foreground itself, without spawning any subagent and without a coordinator footer. The mode-on case is covered by tests/coordinator-hook.test.sh, because a case runs a single prompt and cannot send /coordinator:start first.
 context:
   scaffold_script: place-files.sh
