@@ -24,7 +24,7 @@ Decide this request: delegate to a background Haiku worker (default), split into
 - Trivial request (zero or one quick tool call, or the answer is already in the conversation): resolve it directly.
 - All other requests: delegate to one coherent worker with `Agent`, `subagent_type: "general-purpose"`, `model: "haiku"`, `effort` from the complexity (`low`, `medium`, or `high`), and `run_in_background: true` when the schema has it.
 - Each worker works in this session and this workspace.
-- Siblings only for clearly independent fronts with separate file sets, a maximum of 5 at the same time. When files overlap, run in sequence.
+- Siblings only for clearly independent fronts with separate file sets, a maximum of 5 at the same time, with every `Agent` call in the same message. When files overlap, run in sequence.
 - After you delegate, end the response. The completion notification starts your next turn.
 - Before each foreground tool call, examine if it is part of work that you already delegated. If it is, it belongs to the worker: stop.
 "#

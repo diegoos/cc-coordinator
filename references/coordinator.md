@@ -42,7 +42,7 @@ Call `Agent` with:
 - `description` of 3 to 5 words.
 - `prompt`: the brief. Read [`brief-template.md`](brief-template.md) before the first delegation of the conversation. That file is the worker's only channel. Moving it breaks the first delegation.
 
-Send siblings in the same message, so they run together. Tell the user in one line what you delegated and the effort, for example: "Delegated the fix to a Haiku worker (`high`)."
+Send every sibling's `Agent` call in the same message, so they run together. The response ends after you delegate, so a sibling you leave for a later message starts only after the workers finish. Tell the user in one line what you delegated and the effort, for example: "Delegated the fix to a Haiku worker (`high`)."
 
 End the response after you delegate. The worker's completion notification starts your next turn.
 
