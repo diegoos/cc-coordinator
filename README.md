@@ -28,7 +28,7 @@ The hook ([`hooks/hooks.json`](hooks/hooks.json), [`scripts/coordinator-hook.cmd
 ## Commands
 
 | Command | Effect |
-|---|---|
+| --- | --- |
 | `/coordinator:start` | Starts the coordinator for this session. Any text after the command is handled in the mode. |
 | `/coordinator:stop` | Stops the coordinator. Workers that are still running continue. The session checks each one when it finishes. |
 | `/coordinator:once PROMPT` | Applies the mode to `PROMPT` and to the turns where its workers finish. The session state stays as it was. If the mode is already on, `PROMPT` is an ordinary request in the mode. |
@@ -45,7 +45,7 @@ This folder is the `ds-marketplace` marketplace, for diegoos's plugins and skill
 To load a local copy while you change the plugin:
 
 ```bash
-claude --plugin-dir /path/to/multitask
+claude --plugin-dir /path/to/cc-coordinator
 ```
 
 ## Contributing
