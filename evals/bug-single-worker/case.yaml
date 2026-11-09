@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: bug-single-worker
+expected_outcome: |
+  The coordinator delegates the whole investigate-fix-test loop to exactly one background Haiku worker with a complete brief, then ends its response without waiting, sleeping or editing calc.py itself.
+context:
+  scaffold_script: place-files.sh

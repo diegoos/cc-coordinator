@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: independent-requests-parallel
+expected_outcome: |
+  The coordinator spawns two background Haiku workers in the same message, one for the api change and one for the docs translation, each with an effort that fits its complexity, then ends its response.
+context:
+  scaffold_script: place-files.sh
