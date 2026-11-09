@@ -23,7 +23,7 @@ After a delegation, the coordinator ends the response. The completion notificati
 
 Responses in the mode end with a footer, `**Coordinator**: on`, `once`, `on (skip)`, or `off`, so you can see the state.
 
-The hook ([`hooks/hooks.json`](hooks/hooks.json), [`scripts/coordinator-hook.cmd`](scripts/coordinator-hook.cmd)) keeps the mode on across turns, including after `/compact`. The same file selects the binary for macOS, Linux, or Windows, on x64 or arm64. `/coordinator:start` writes `${CLAUDE_PLUGIN_DATA}/sessions/<session_id>`, and `/coordinator:stop` removes it. While that file exists, each later prompt gets a short reminder that points at the coordinator instructions. Prompts that start with a `/coordinator:` command do not get it, except `/coordinator:once` while the mode is on, which gets it from the command hook. When `/coordinator:once` or `/coordinator:skip` comes with no request, the hook asks you to send it again. The session end deletes the file. A resumed session starts with the mode off. `/coordinator:start` also deletes state files older than 30 days.
+The hook ([`hooks/hooks.json`](hooks/hooks.json), [`scripts/coordinator-hook.cmd`](scripts/coordinator-hook.cmd)) keeps the mode on across turns, including after `/compact`. The wrapper script selects the binary for macOS, Linux, or Windows, on x64 or arm64. `/coordinator:start` writes `${CLAUDE_PLUGIN_DATA}/sessions/<session_id>`, and `/coordinator:stop` removes it. While that file exists, each later prompt gets a short reminder that points at the coordinator instructions. Prompts that start with a `/coordinator:` command do not get it, except `/coordinator:once` while the mode is on, which gets it from the command hook. When `/coordinator:once` or `/coordinator:skip` comes with no request, the hook asks you to send it again. The session end deletes the file. A resumed session starts with the mode off. `/coordinator:start` also deletes state files older than 30 days.
 
 ## Commands
 
@@ -60,4 +60,11 @@ make
 
 `make` builds the hook for macOS, Linux, and Windows on x64 and arm64, copies each binary to `scripts/bin/`, and runs the tests. To run only the tests, use `make test`. They are the Rust unit tests and [`tests/coordinator-hook.test.sh`](tests/coordinator-hook.test.sh), which needs `jq`. Add a check to that script for each change in hook behavior.
 
-Behavior of the coordinator lives in [`references/coordinator.md`](references/coordinator.md) and in the skills. The cases in [`evals/`](evals/) test it. [`EVAL-STEPS.md`](EVAL-STEPS.md) explains how to run one.
+The behavior of the coordinator lives in [`references/coordinator.md`](references/coordinator.md) and in the skills. The cases in [`evals/`](evals/) test it. Each case sends one prompt with the mode off, so the `/coordinator:skip` case with the mode on is covered only by the shell tests. To run the cases:
+
+```bash
+make clean
+claude plugin eval . --scaffold --allow-tools Bash Write Edit
+```
+
+`make clean` is required. Cargo creates hard links in `hook/target/`, and `claude plugin eval` refuses a plugin that contains them. `--scaffold` copies each case's input files. Add `--case NAME` to run one case. Results go to `evals/results/`, which is in `.gitignore`. A case passes when its `passRate` is `1`, and `aggregate-result.json` in the results folder has the numbers.
