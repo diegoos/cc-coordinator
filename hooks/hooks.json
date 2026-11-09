@@ -1,0 +1,38 @@
+{
+  "description": "Keeps coordinator mode across turns and injects its reminders.",
+  "hooks": {
+    "UserPromptExpansion": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/coordinator-hook.cmd\" expansion",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/coordinator-hook.cmd\" submit",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/coordinator-hook.cmd\" session-end",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
