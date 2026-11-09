@@ -1,0 +1,14 @@
+{
+  "name": "ds-marketplace",
+  "description": "Marketplace for diegoos's plugins and skills.",
+  "owner": {
+    "name": "diegoos"
+  },
+  "plugins": [
+    {
+      "name": "coordinator",
+      "source": "./",
+      "description": "Coordinator mode: delegates work to Haiku workers in the background."
+    }
+  ]
+}
