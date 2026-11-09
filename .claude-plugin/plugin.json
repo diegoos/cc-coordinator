@@ -1,7 +1,7 @@
 {
   "name": "coordinator",
   "description": "Coordinator mode: delegates work to Haiku workers in the background.",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "author": {
     "name": "diegoos"
   }
