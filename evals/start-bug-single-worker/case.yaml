@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: start-bug-single-worker
+expected_outcome: |
+  The coordinator mode turns on with /coordinator:start. The agent confirms the mode is on, delegates the fix and the test run to exactly one background Haiku worker, ends its response with the on footer, and does not edit calc.py itself.
+context:
+  scaffold_script: place-files.sh

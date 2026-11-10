@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: stop-mode-off
+expected_outcome: |
+  With the coordinator mode already off, /coordinator:stop changes nothing. The agent states that the mode is off, makes no Agent call, edits no file, and ends its response with the off footer.
+context:
+  scaffold_script: place-files.sh
