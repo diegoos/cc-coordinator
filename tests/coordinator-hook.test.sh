@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Tests for scripts/coordinator-hook.cmd. Run: bash tests/coordinator-hook.test.sh
+# Set COORDINATOR_HOOK_BIN to test a built binary directly instead of the wrapper.
 set -u
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
-hook="$root/scripts/coordinator-hook.cmd"
+hook="${COORDINATOR_HOOK_BIN:-$root/scripts/coordinator-hook.cmd}"
 data_dir="$(mktemp -d)"
 state="$data_dir/sessions/s1"
 failures=0
@@ -54,7 +55,7 @@ lacks() {
 
 out=$(expansion coordinator:start | context_of)
 check "start creates state" test -f "$state"
-check "start injects start" contains "$out" "turned on **coordinator mode**"
+check "start injects start" contains "$out" "set **coordinator mode** on"
 check "start carries rules" contains "$out" 'model: "haiku"'
 check "start asks for the on footer" contains "$out" '`**Coordinator**: on`'
 check "start resolves the coordinator path" contains "$out" "$root/references/coordinator.md"
@@ -159,12 +160,83 @@ out=$(printf '%s' "$json" | "$hook" expansion 2>/dev/null | context_of)
 check "once accepts quotes and a newline in args" contains "$out" '`**Coordinator**: once`'
 check "once with quotes keeps state off" test ! -f "$state"
 
+out=$(run_hook expansion '{"session_id":"s1","command_name":"coordinator:once","prompt":"/coordinator:once fix it"}' | context_of)
+check "once without command_args reads the prompt" lacks "$out" "send the request again"
+check "once from prompt keeps the once footer" contains "$out" '`**Coordinator**: once`'
+
+out=$(run_hook expansion '{"session_id":"s1","command_name":"coordinator:skip","command_args":"","prompt":"/coordinator:skip"}' | context_of)
+check "skip without a request asks to resend" contains "$out" "send the request again"
+
+out=$(run_hook expansion '{"session_id":"s1","command_name":"coordinator:once","command_args":"","prompt":"/coordinator:once fix it"}' | context_of)
+check "blank command_args falls back to the prompt" contains "$out" '`**Coordinator**: once`'
+
 expansion coordinator:start >/dev/null
 out=$(printf '{"session_id":"s1"}' | CLAUDE_PLUGIN_ROOT= "$hook" session-end 2>/dev/null; test ! -f "$state" && echo gone)
 check "session-end works without a plugin root" contains "$out" gone
 
 out=$(printf '{"session_id":"s1"}' | CLAUDE_PLUGIN_DATA= "$hook" submit 2>/dev/null)
 check "missing plugin data dir is silent" test -z "$out"
+
+expansion coordinator:start >/dev/null
+check "expansion names its event" test "$(expansion coordinator:skip "what is the node version" | jq -r '.hookSpecificOutput.hookEventName')" = UserPromptExpansion
+check "submit names its event" test "$(submit "fix the bug" | jq -r '.hookSpecificOutput.hookEventName')" = UserPromptSubmit
+
+run_hook session-end 'not json'
+check "session-end with invalid JSON exits 0" test $? -eq 0
+check "session-end with invalid JSON keeps other state" test -f "$state"
+
+run_hook bogus '{"session_id":"s1"}'
+check "unknown event exits 0" test $? -eq 0
+check "unknown event prints nothing" test -z "$(run_hook bogus '{"session_id":"s1"}')"
+check "unknown event keeps state" test -f "$state"
+
+printf '{"session_id":"s1"}' | "$hook" 2>/dev/null
+check "missing event argument exits 0" test $? -eq 0
+check "missing event argument prints nothing" test -z "$(printf '{"session_id":"s1"}' | "$hook" 2>/dev/null)"
+
+out=$(printf '%s' '{"session_id":"s1","command_name":"coordinator:start","command_args":""}' | env -u CLAUDE_PLUGIN_ROOT "$hook" expansion 2>/dev/null | context_of)
+check "missing plugin root falls back to the install path" contains "$out" "$root/references/coordinator.md"
+
+long_id=$(head -c 200 /dev/zero | tr '\0' a)
+out=$(printf '{"session_id":"%s","command_name":"coordinator:start","command_args":""}' "$long_id" | "$hook" expansion 2>/dev/null)
+check "long session_id prints nothing" test -z "$out"
+check "long session_id writes no state" test ! -e "$data_dir/sessions/$long_id"
+
+max_id=$(head -c 128 /dev/zero | tr '\0' a)
+printf '{"session_id":"%s","command_name":"coordinator:start","command_args":""}' "$max_id" | "$hook" expansion >/dev/null 2>&1
+check "128-character session_id keeps state" test -f "$data_dir/sessions/$max_id"
+
+bad_data="$(mktemp -d)"
+: > "$bad_data/sessions"
+out=$(printf '%s' '{"session_id":"s1","command_name":"coordinator:start","command_args":""}' | CLAUDE_PLUGIN_DATA="$bad_data" "$hook" expansion 2>/dev/null)
+check "start that cannot write state warns the user" contains "$out" "could not turn on"
+check "start that cannot write state says the mode did not change" contains "$(printf '%s' "$out" | context_of)" "did not change"
+rm -rf "$bad_data"
+
+expansion coordinator:start >/dev/null
+chmod 444 "$state"
+out=$(expansion coordinator:start | context_of)
+check "start with a read-only state file reports the mode on" contains "$out" "set **coordinator mode** on"
+check "start with a read-only state file asks for the on footer" contains "$out" '`**Coordinator**: on`'
+chmod 644 "$state"
+
+chmod 555 "$data_dir/sessions"
+out=$(expansion coordinator:stop)
+check "stop that cannot remove state warns the user" contains "$out" "could not turn off"
+check "stop that cannot remove state says the mode did not change" contains "$(printf '%s' "$out" | context_of)" "did not change"
+check "stop that cannot remove state keeps the on footer" contains "$(printf '%s' "$out" | context_of)" '`**Coordinator**: on`'
+check "stop that cannot remove state keeps state on" test -f "$state"
+chmod 755 "$data_dir/sessions"
+
+rm -f "$state"
+mkdir "$state"
+out=$(expansion coordinator:stop | context_of)
+check "stop with a directory as state injects stop-off" contains "$out" "was already off"
+out=$(expansion coordinator:start)
+check "start with a directory as state warns the user" contains "$out" "could not turn on"
+run_hook session-end '{"session_id":"s1"}'
+check "session-end that cannot remove state exits 0" test $? -eq 0
+rmdir "$state"
 
 echo
 [ "$failures" -eq 0 ] && echo "all passed" || { echo "$failures failed"; exit 1; }
