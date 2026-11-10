@@ -33,8 +33,9 @@ all:
 	$(MAKE) test
 
 test:
-	cd hook && cargo test
-	bash tests/coordinator-hook.test.sh
+	cd hook && cargo test && cargo build
+	COORDINATOR_HOOK_BIN=$(CURDIR)/hook/target/debug/coordinator-hook bash tests/coordinator-hook.test.sh
+	bash tests/coordinator-wrapper.test.sh
 
 clean:
 	cd hook && cargo clean

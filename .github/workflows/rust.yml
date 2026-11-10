@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: ["main"]
 
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -16,8 +19,21 @@ jobs:
       run:
         working-directory: hook
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - name: Build
         run: cargo build --verbose
       - name: Run tests
         run: cargo test --verbose
+      - name: Run shell tests
+        working-directory: .
+        env:
+          COORDINATOR_HOOK_BIN: ${{ github.workspace }}/hook/target/debug/coordinator-hook
+        run: |
+          command -v jq >/dev/null || sudo apt-get install -y jq
+          bash tests/coordinator-hook.test.sh
+      - name: Run shell tests against the committed binary
+        working-directory: .
+        run: bash tests/coordinator-hook.test.sh
+      - name: Run wrapper tests
+        working-directory: .
+        run: bash tests/coordinator-wrapper.test.sh
