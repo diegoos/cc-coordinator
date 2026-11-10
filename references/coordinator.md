@@ -8,7 +8,7 @@ The commands are `/coordinator:start`, `/coordinator:stop`, `/coordinator:once P
 
 ### Footer
 
-End each response with the mode state. Use `on` while the mode is on, `once` for the responses of a `/coordinator:once`, `on (skip)` for the responses of a `/coordinator:skip`, and `off` only in the stop confirmation:
+End each response with the mode state. Use `on` while the mode is on, `once` for the responses of a `/coordinator:once` with the mode off, `on (skip)` for the responses of a `/coordinator:skip` with the mode on, and `off` only in the stop confirmation. A `/coordinator:once` with the mode on uses `on`. A `/coordinator:skip` with the mode off has no footer:
 
 ```markdown
 <response>
@@ -35,7 +35,7 @@ For a large feature, start with one worker that investigates and plans. Open sib
 
 Call `Agent` with:
 
-- `subagent_type: "general-purpose"`, which `SendMessage` can resume. For a read-only search with no follow-up, `"Explore"` is also correct, and you cannot resume it. A fork inherits the session model and ignores `model`, so each worker is a new agent.
+- `subagent_type: "general-purpose"`, the only type for a worker. `SendMessage` can resume it, and a worker needs edit tools. A fork inherits the session model and ignores `model`, so each worker is a new agent.
 - `model: "haiku"`.
 - `effort` from the Effort table.
 - `run_in_background: true` when the schema has this parameter. Some harness contexts run every subagent in the background and hide the parameter.
@@ -62,7 +62,7 @@ Classify each delegation before you send it:
 | `medium` | Task that needs attention. | Implement more code, compare or reconcile documents, make a small change that must keep the current behavior. |
 | `high` | Complex task. | Complex implementation, large or structural documentation, UI/UX, debugging, investigation with hypotheses, architecture decisions. |
 
-When two levels both fit, use the higher one. The level the user names wins. A model change, or a level outside this table, needs explicit user authorization. When the `Agent` schema has no `effort`, ask once whether the harness default is acceptable. That answer covers the conversation.
+When two levels both fit, use the higher one. The level the user names wins. A model change, or a level outside this table, needs explicit user authorization. When the `Agent` schema has no `effort`, omit it and name the harness default in the one-line notice.
 
 The harness can override the model or the effort (for example, `CLAUDE_CODE_SUBAGENT_MODEL_FORCE`). When no metadata shows the effective configuration, report the requested configuration and say it is not verified.
 
@@ -90,7 +90,8 @@ When the notification arrives:
 - An independent request gets a new worker, within the limit of 5.
 - A question the conversation history answers gets a direct answer.
 - The files of an active worker stay with it until it delivers.
-- Ask for status with `SendMessage`. Stop a worker with `TaskStop` when the user asks, or when the worker reports the same failure again. Then tell the user the last evidence and leave the task stopped until the user decides.
+- Ask for status with `SendMessage`. A completion notification can fail to arrive, so when the user asks about a worker that seems idle, send it `SendMessage` before you report it as still running.
+- Stop a worker with `TaskStop` when the user asks, or when the worker reports the same failure again. Then tell the user the last evidence and leave the task stopped until the user decides.
 
 ## Communication and permissions
 

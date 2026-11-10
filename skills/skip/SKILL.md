@@ -1,5 +1,5 @@
 ---
-description: "Runs one request without coordinator mode."
+description: "Runs one request in the foreground, with no new worker. Session mode unchanged."
 argument-hint: "PROMPT"
 disable-model-invocation: true
 ---

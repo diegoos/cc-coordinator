@@ -15,7 +15,7 @@ For each request it picks one path:
 - It opens up to 5 workers in the same message only for independent fronts: separate areas of the code, separate requests, or a review where you compare independent answers.
 - It runs one long command, such as a build or the test suite, with background Bash.
 
-Each worker is a new `general-purpose` agent with `model: "haiku"`. A fork inherits the session model and ignores that setting. The coordinator chooses `low`, `medium`, or `high` from the task. If two levels both fit, it uses the higher one. A level you name has priority.
+Each worker is a new `general-purpose` agent with `model: "haiku"`. A fork inherits the session model and ignores that setting. The coordinator chooses `low`, `medium`, or `high` from the task. If two levels both fit, it uses the higher one. When the `Agent` schema has no `effort`, the harness default applies, and the notice names it. A level you name has priority.
 
 Workers edit the checkout you have open. Two workers run at the same time only when their files do not overlap and they do not share a port, a database, or a build target. The brief is [`references/brief-template.md`](references/brief-template.md). A worker cannot ask questions. If a decision is missing, it stops with `status: blocked`.
 
@@ -23,7 +23,7 @@ After a delegation, the coordinator ends the response. The completion notificati
 
 Responses in the mode end with a footer, `**Coordinator**: on`, `once`, `on (skip)`, or `off`, so you can see the state.
 
-The hook ([`hooks/hooks.json`](hooks/hooks.json), [`scripts/coordinator-hook.cmd`](scripts/coordinator-hook.cmd)) keeps the mode on across turns, including after `/compact`. The wrapper script selects the binary for macOS, Linux, or Windows, on x64 or arm64. `/coordinator:start` writes `${CLAUDE_PLUGIN_DATA}/sessions/<session_id>`, and `/coordinator:stop` removes it. While that file exists, each later prompt gets a short reminder that points at the coordinator instructions. Prompts that start with a `/coordinator:` command do not get it, except `/coordinator:once` while the mode is on, which gets it from the command hook. When `/coordinator:once` or `/coordinator:skip` comes with no request, the hook asks you to send it again. The session end deletes the file. A resumed session starts with the mode off. `/coordinator:start` also deletes state files older than 30 days.
+The hook ([`hooks/hooks.json`](hooks/hooks.json), [`scripts/coordinator-hook.cmd`](scripts/coordinator-hook.cmd)) keeps the mode on across turns, including after `/compact`. The wrapper script selects the binary for macOS, Linux, or Windows, on x64 or arm64. The hook writes `${CLAUDE_PLUGIN_DATA}/sessions/<session_id>` when `/coordinator:start` runs, and removes it when `/coordinator:stop` runs or the session ends. `/clear` ends the session too, so the mode is off after `/clear`, and `/coordinator:start` turns it on again. While that file exists, each later prompt gets a short reminder that points at the coordinator instructions. This includes the turns that Claude Code starts on its own, such as a worker completion notification, because `UserPromptSubmit` fires on those turns too. A prompt that starts with a `/coordinator:` command gets no prompt reminder. Its reminder comes from the command hook, so `/coordinator:skip` and `/coordinator:once` get one while the mode is on. When `/coordinator:once` or `/coordinator:skip` comes with no request, the hook asks you to send it again. A resumed session starts with the mode off. `/coordinator:start` also deletes state files older than 30 days. The cleanup cannot tell an idle live session from a crashed one, so a session with no prompt for 30 days can lose its state, and its next prompt gets no reminder. If the hook cannot write or remove the state file, it shows a `coordinator:` warning, and tells the model that the mode did not change.
 
 ## Commands
 
@@ -58,7 +58,7 @@ You need `rustup` and `zig`. Run `make install` once to add the Rust targets and
 make
 ```
 
-`make` builds the hook for macOS, Linux, and Windows on x64 and arm64, copies each binary to `scripts/bin/`, and runs the tests. To run only the tests, use `make test`. They are the Rust unit tests and [`tests/coordinator-hook.test.sh`](tests/coordinator-hook.test.sh), which needs `jq`. Add a check to that script for each change in hook behavior.
+`make` builds the hook for macOS, Linux, and Windows on x64 and arm64, copies each binary to `scripts/bin/`, and runs the tests. To run only the tests, use `make test`. They are the Rust unit tests and [`tests/coordinator-hook.test.sh`](tests/coordinator-hook.test.sh), which needs `jq`, and [`tests/coordinator-wrapper.test.sh`](tests/coordinator-wrapper.test.sh), which runs the wrapper with stub binaries for each platform. `make test` runs the hook shell tests against the binary it builds, not against the ones in `scripts/bin/`. Add a check to that script for each change in hook behavior.
 
 The behavior of the coordinator lives in [`references/coordinator.md`](references/coordinator.md) and in the skills. The cases in [`evals/`](evals/) test it. Each case sends one prompt with the mode off, so the `/coordinator:skip` case with the mode on is covered only by the shell tests. To run the cases:
 
