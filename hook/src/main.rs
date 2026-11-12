@@ -74,6 +74,7 @@ fn run() -> Result<(), String> {
     Ok(())
 }
 
+#[derive(PartialEq)]
 enum Action {
     Start,
     Stop,
@@ -91,10 +92,64 @@ fn coordinator_action(command_name: &str) -> Option<Action> {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Tier {
+    Low,
+    Mid,
+    High,
+}
+
+impl Tier {
+    fn from_word(word: &str) -> Option<Tier> {
+        match word {
+            "low" => Some(Tier::Low),
+            "mid" => Some(Tier::Mid),
+            "high" => Some(Tier::High),
+            _ => None,
+        }
+    }
+
+    fn word(self) -> &'static str {
+        match self {
+            Tier::Low => "low",
+            Tier::Mid => "mid",
+            Tier::High => "high",
+        }
+    }
+
+    fn reminder(self) -> &'static str {
+        match self {
+            Tier::Low => "tier-low",
+            Tier::Mid => "tier-mid",
+            Tier::High => "tier-high",
+        }
+    }
+}
+
+/// Returns the tier when it is the exact first word of the args. Every other first word is part of the request.
+fn parse_tier(args: &str) -> Option<Tier> {
+    args.split(is_posix_space)
+        .find(|word| !word.is_empty())
+        .and_then(Tier::from_word)
+}
+
+/// A missing state file, or one with empty or unknown content, reads as `low`.
+fn read_tier(state_file: &Path) -> Tier {
+    fs::read_to_string(state_file)
+        .ok()
+        .and_then(|content| Tier::from_word(content.trim()))
+        .unwrap_or(Tier::Low)
+}
+
 fn on_expansion(root: &Path, state_file: &Path, input: &HookInput) {
     let Some(action) = coordinator_action(&input.command_name) else {
         return;
     };
+    if action == Action::Start {
+        remove_stale_states(state_file);
+    }
+
+    let saved = read_tier(state_file);
 
     if matches!(action, Action::Once | Action::Skip) && is_blank(request_args(input)) {
         let names: &[&str] = if state_file.is_file() {
@@ -102,23 +157,34 @@ fn on_expansion(root: &Path, state_file: &Path, input: &HookInput) {
         } else {
             &["missing-prompt"]
         };
-        emit_reminders(root, "UserPromptExpansion", names);
+        emit_reminders(root, "UserPromptExpansion", names, saved);
 
         return;
     }
 
     match action {
         Action::Start => {
-            remove_stale_states(state_file);
+            let is_on = state_file.is_file();
+            let tier = parse_tier(request_args(input)).unwrap_or(saved);
 
-            if state_file.is_file() {
+            if is_on && tier == saved {
                 refresh(state_file);
-            } else if let Err(err) = touch(state_file) {
-                emit_failure(
-                    root,
-                    "start-failed",
-                    &format!("could not turn on coordinator mode: {err}"),
-                );
+            } else if let Err(err) = write_tier(state_file, tier) {
+                if is_on {
+                    emit_failure(
+                        root,
+                        &["tier-failed", saved.reminder(), "footer-on", "rules"],
+                        saved,
+                        &format!("could not change the coordinator tier: {err}"),
+                    );
+                } else {
+                    emit_failure(
+                        root,
+                        &["start-failed"],
+                        saved,
+                        &format!("could not turn on coordinator mode: {err}"),
+                    );
+                }
 
                 return;
             }
@@ -126,28 +192,30 @@ fn on_expansion(root: &Path, state_file: &Path, input: &HookInput) {
             emit_reminders(
                 root,
                 "UserPromptExpansion",
-                &["start", "footer-on", "rules"],
+                &["start", tier.reminder(), "footer-on", "rules"],
+                tier,
             );
         }
         Action::Stop if !state_file.is_file() => {
-            emit_reminders(root, "UserPromptExpansion", &["stop-off"]);
+            emit_reminders(root, "UserPromptExpansion", &["stop-off"], saved);
         }
         Action::Stop => match remove_state(state_file) {
-            Ok(true) => emit_reminders(root, "UserPromptExpansion", &["stop"]),
-            Ok(false) => emit_reminders(root, "UserPromptExpansion", &["stop-off"]),
+            Ok(true) => emit_reminders(root, "UserPromptExpansion", &["stop"], saved),
+            Ok(false) => emit_reminders(root, "UserPromptExpansion", &["stop-off"], saved),
             Err(err) => emit_failure(
                 root,
-                "stop-failed",
+                &["stop-failed"],
+                saved,
                 &format!("could not turn off coordinator mode: {err}"),
             ),
         },
         Action::Once => {
             let names: &[&str] = if state_file.is_file() {
-                &["continue", "footer-on"]
+                &["continue", saved.reminder(), "footer-on"]
             } else {
-                &["once", "rules"]
+                &["once", Tier::Low.reminder(), "rules"]
             };
-            emit_reminders(root, "UserPromptExpansion", names);
+            emit_reminders(root, "UserPromptExpansion", names, saved);
         }
         Action::Skip => {
             let names: &[&str] = if state_file.is_file() {
@@ -155,7 +223,7 @@ fn on_expansion(root: &Path, state_file: &Path, input: &HookInput) {
             } else {
                 &["skip-off"]
             };
-            emit_reminders(root, "UserPromptExpansion", names);
+            emit_reminders(root, "UserPromptExpansion", names, saved);
         }
     }
 }
@@ -189,18 +257,19 @@ fn refresh(path: &Path) {
     }
 }
 
-fn touch(path: &Path) -> io::Result<()> {
+fn write_tier(path: &Path, tier: Tier) -> io::Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
 
-    fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .truncate(false)
-        .open(path)?;
+    let mut temp = path.as_os_str().to_owned();
+    temp.push(format!(".{}.tmp", std::process::id()));
+    let temp = PathBuf::from(temp);
 
-    Ok(())
+    fs::write(&temp, tier.word())?;
+    fs::rename(&temp, path).inspect_err(|_| {
+        let _ = fs::remove_file(&temp);
+    })
 }
 
 /// Returns false when there was no state file.
@@ -223,18 +292,25 @@ fn on_submit(root: &Path, state_file: &Path, input: &HookInput) {
         return;
     }
 
-    emit_reminders(root, "UserPromptSubmit", &["continue", "footer-on"]);
+    let tier = read_tier(state_file);
+
+    emit_reminders(
+        root,
+        "UserPromptSubmit",
+        &["continue", tier.reminder(), "footer-on"],
+        tier,
+    );
 }
 
-fn emit_reminders(root: &Path, event: &'static str, names: &[&str]) {
-    if let Some(context) = render(root, names) {
+fn emit_reminders(root: &Path, event: &'static str, names: &[&str], tier: Tier) {
+    if let Some(context) = render(root, names, tier) {
         emit(event, None, Some(context));
     }
 }
 
 /// Warns the user and tells the model that the state did not change.
-fn emit_failure(root: &Path, name: &str, message: &str) {
-    let context = render(root, &[name]);
+fn emit_failure(root: &Path, names: &[&str], tier: Tier, message: &str) {
+    let context = render(root, names, tier);
 
     emit(
         "UserPromptExpansion",
@@ -243,7 +319,7 @@ fn emit_failure(root: &Path, name: &str, message: &str) {
     );
 }
 
-fn render(root: &Path, names: &[&str]) -> Option<String> {
+fn render(root: &Path, names: &[&str], tier: Tier) -> Option<String> {
     let mut text = String::new();
 
     for name in names {
@@ -257,7 +333,10 @@ fn render(root: &Path, names: &[&str]) -> Option<String> {
 
     let coordinator = root.join("references/coordinator.md");
 
-    Some(text.replace("{{COORDINATOR_PATH}}", &coordinator.display().to_string()))
+    Some(
+        text.replace("{{COORDINATOR_PATH}}", &coordinator.display().to_string())
+            .replace("{{TIER}}", tier.word()),
+    )
 }
 
 fn emit(event: &'static str, system_message: Option<String>, context: Option<String>) {
@@ -357,8 +436,8 @@ fn warn(message: &str) {
 #[cfg(test)]
 mod tests {
     use super::{
-        is_blank, is_coordinator_prompt, remove_state, request_args, touch, valid_session_id,
-        HookInput,
+        is_blank, is_coordinator_prompt, parse_tier, read_tier, remove_state, request_args,
+        valid_session_id, write_tier, HookInput, Tier,
     };
     use std::{env, fs, path::PathBuf};
 
@@ -386,14 +465,51 @@ mod tests {
     }
 
     #[test]
-    fn touch_reports_a_state_path_it_cannot_create() {
-        let dir = temp_dir("touch");
+    fn write_tier_reports_a_state_path_it_cannot_create() {
+        let dir = temp_dir("write");
         let blocker = dir.join("sessions");
 
         fs::write(&blocker, "").unwrap();
 
-        assert!(touch(&blocker.join("s1")).is_err());
-        assert!(touch(&dir.join("s2")).is_ok());
+        assert!(write_tier(&blocker.join("s1"), Tier::Low).is_err());
+        assert!(write_tier(&dir.join("s2"), Tier::Low).is_ok());
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn only_an_exact_lowercase_first_word_is_a_tier() {
+        assert_eq!(parse_tier("low"), Some(Tier::Low));
+        assert_eq!(parse_tier("mid fix the bug"), Some(Tier::Mid));
+        assert_eq!(parse_tier("  high\npriority bug"), Some(Tier::High));
+        assert_eq!(parse_tier("low high priority bug"), Some(Tier::Low));
+        assert_eq!(parse_tier(""), None);
+        assert_eq!(parse_tier("fix the high bug"), None);
+
+        for word in ["High", "MID", "high-priority", "higher", "middle", "low."] {
+            assert_eq!(parse_tier(word), None, "{word}");
+        }
+    }
+
+    #[test]
+    fn the_state_file_keeps_the_tier_and_reads_as_low_without_one() {
+        let dir = temp_dir("tier");
+        let state = dir.join("s1");
+
+        assert_eq!(read_tier(&state), Tier::Low);
+
+        for tier in [Tier::Mid, Tier::High, Tier::Low] {
+            write_tier(&state, tier).unwrap();
+
+            assert_eq!(fs::read_to_string(&state).unwrap(), tier.word());
+            assert_eq!(read_tier(&state), tier);
+        }
+
+        for content in ["", "max", "High", "mid high"] {
+            fs::write(&state, content).unwrap();
+
+            assert_eq!(read_tier(&state), Tier::Low, "{content:?}");
+        }
 
         fs::remove_dir_all(&dir).unwrap();
     }

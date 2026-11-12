@@ -8,7 +8,7 @@
     {
       "name": "coordinator",
       "source": "./",
-      "description": "Coordinator mode: delegates work to Haiku workers in the background."
+      "description": "Coordinator mode: delegates work to background workers on Haiku, Sonnet, or Opus, by model tier."
     }
   ]
 }

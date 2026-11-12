@@ -56,8 +56,10 @@ lacks() {
 out=$(expansion coordinator:start | context_of)
 check "start creates state" test -f "$state"
 check "start injects start" contains "$out" "set **coordinator mode** on"
-check "start carries rules" contains "$out" 'model: "haiku"'
-check "start asks for the on footer" contains "$out" '`**Coordinator**: on`'
+check "start carries rules" contains "$out" 'subagent_type: "general-purpose"'
+check "rules leave the model to the tier" lacks "$out" 'model: "haiku"'
+check "rules point to the Model section" contains "$out" "Model section"
+check "start asks for the on footer" contains "$out" '`**Coordinator**: on (low)`'
 check "start resolves the coordinator path" contains "$out" "$root/references/coordinator.md"
 check "start has no unresolved placeholder" lacks "$out" "{{COORDINATOR_PATH}}"
 
@@ -66,7 +68,7 @@ check "start with a prompt keeps state on" test -f "$state"
 
 out=$(submit "fix the bug" | context_of)
 check "submit with state injects continue" contains "$out" "still in **coordinator mode**"
-check "continue asks for the on footer" contains "$out" '`**Coordinator**: on`'
+check "continue asks for the on footer" contains "$out" '`**Coordinator**: on (low)`'
 check "continue points to the coordinator" contains "$out" "$root/references/coordinator.md"
 
 for prompt in "/coordinator:stop" "/coordinator:once fix it" "/coordinator:skip fix it" "/coordinator:start" "  /coordinator:skip"; do
@@ -81,26 +83,26 @@ done
 
 out=$(expansion coordinator:once "fix it" | context_of)
 check "once with mode on keeps state on" test -f "$state"
-check "once with mode on asks for the on footer" contains "$out" '`**Coordinator**: on`'
+check "once with mode on asks for the on footer" contains "$out" '`**Coordinator**: on (low)`'
 check "once with mode on omits the once footer" lacks "$out" '`**Coordinator**: once`'
 
 out=$(expansion coordinator:skip "what is the node version" | context_of)
 check "skip keeps state on" test -f "$state"
 check "skip injects skip" contains "$out" "this request skips it"
 check "skip asks for the skip footer" contains "$out" '`**Coordinator**: on (skip)`'
-check "skip omits worker rules" lacks "$out" 'model: "haiku"'
+check "skip omits worker rules" lacks "$out" 'subagent_type: "general-purpose"'
 
 out=$(submit "fix the bug" | context_of)
 check "request after skip injects continue" contains "$out" "still in **coordinator mode**"
 
 out=$(expansion coordinator:skip "" | context_of)
 check "empty skip asks to resend" contains "$out" "send the request again"
-check "empty skip with mode on keeps the on footer" contains "$out" '`**Coordinator**: on`'
+check "empty skip with mode on keeps the on footer" contains "$out" '`**Coordinator**: on (low)`'
 check "empty skip keeps state on" test -f "$state"
 
 out=$(expansion coordinator:once "   " | context_of)
 check "blank once asks to resend" contains "$out" "send the request again"
-check "blank once omits worker rules" lacks "$out" 'model: "haiku"'
+check "blank once omits worker rules" lacks "$out" 'subagent_type: "general-purpose"'
 
 out=$(expansion coordinator:stop | context_of)
 check "stop removes state" test ! -f "$state"
@@ -119,7 +121,8 @@ check "skip with mode off injects skip-off" contains "$out" "mode** is off"
 
 out=$(expansion coordinator:once "fix test X" | context_of)
 check "once keeps state off" test ! -f "$state"
-check "once carries rules" contains "$out" 'model: "haiku"'
+check "once carries rules" contains "$out" 'subagent_type: "general-purpose"'
+check "once with mode off uses the low tier" contains "$out" 'tier is `low`'
 check "once asks for the once footer" contains "$out" '`**Coordinator**: once`'
 
 out=$(expansion coordinator:once 'fix\nthe test' | context_of)
@@ -217,14 +220,14 @@ expansion coordinator:start >/dev/null
 chmod 444 "$state"
 out=$(expansion coordinator:start | context_of)
 check "start with a read-only state file reports the mode on" contains "$out" "set **coordinator mode** on"
-check "start with a read-only state file asks for the on footer" contains "$out" '`**Coordinator**: on`'
+check "start with a read-only state file asks for the on footer" contains "$out" '`**Coordinator**: on (low)`'
 chmod 644 "$state"
 
 chmod 555 "$data_dir/sessions"
 out=$(expansion coordinator:stop)
 check "stop that cannot remove state warns the user" contains "$out" "could not turn off"
 check "stop that cannot remove state says the mode did not change" contains "$(printf '%s' "$out" | context_of)" "did not change"
-check "stop that cannot remove state keeps the on footer" contains "$(printf '%s' "$out" | context_of)" '`**Coordinator**: on`'
+check "stop that cannot remove state keeps the on footer" contains "$(printf '%s' "$out" | context_of)" '`**Coordinator**: on (low)`'
 check "stop that cannot remove state keeps state on" test -f "$state"
 chmod 755 "$data_dir/sessions"
 
@@ -237,6 +240,89 @@ check "start with a directory as state warns the user" contains "$out" "could no
 run_hook session-end '{"session_id":"s1"}'
 check "session-end that cannot remove state exits 0" test $? -eq 0
 rmdir "$state"
+
+models_of() {
+  case "$1" in
+    low) echo 'only `haiku`' ;;
+    mid) echo '`haiku` or `sonnet`' ;;
+    high) echo '`haiku`, `sonnet`, or `opus`' ;;
+  esac
+}
+
+for tier in low mid high; do
+  out=$(expansion coordinator:start "$tier fix the bug" | context_of)
+  check "start $tier stores the tier" test "$(cat "$state")" = "$tier"
+  check "start $tier names the tier" contains "$out" "tier is \`$tier\`"
+  check "start $tier names its models" contains "$out" "$(models_of "$tier")"
+  check "start $tier asks for the $tier footer" contains "$out" "\`**Coordinator**: on ($tier)\`"
+  check "start $tier carries rules" contains "$out" 'subagent_type: "general-purpose"'
+  expansion coordinator:stop >/dev/null
+done
+
+expansion coordinator:start >/dev/null
+check "start with no tier and mode off stores low" test "$(cat "$state")" = low
+
+out=$(expansion coordinator:start mid | context_of)
+check "start with a tier and mode on changes the tier" test "$(cat "$state")" = mid
+check "tier change asks for the new footer" contains "$out" '`**Coordinator**: on (mid)`'
+
+out=$(expansion coordinator:start | context_of)
+check "start with no tier keeps the saved tier" test "$(cat "$state")" = mid
+check "start with no tier asks for the saved footer" contains "$out" '`**Coordinator**: on (mid)`'
+
+out=$(expansion coordinator:start "fix the high bug" | context_of)
+check "a first word that is not a tier keeps the saved tier" test "$(cat "$state")" = mid
+check "a first word that is not a tier names the saved tier" contains "$out" 'tier is `mid`'
+
+for args in "High priority bug" "high-priority bug" "higher limit"; do
+  expansion coordinator:start "$args" >/dev/null
+  check "start '$args' keeps the tier" test "$(cat "$state")" = mid
+done
+
+out=$(submit "fix the bug" | context_of)
+check "submit names the saved tier" contains "$out" 'tier is `mid`'
+check "submit names the models of the tier" contains "$out" "$(models_of mid)"
+check "submit asks for the tier footer" contains "$out" '`**Coordinator**: on (mid)`'
+check "continue points to the Model section" contains "$out" "Model section"
+
+out=$(expansion coordinator:once "fix it" | context_of)
+check "once with mode on uses the saved tier" contains "$out" 'tier is `mid`'
+check "once with mode on asks for the tier footer" contains "$out" '`**Coordinator**: on (mid)`'
+
+out=$(expansion coordinator:skip "" | context_of)
+check "empty skip with mode on keeps the tier footer" contains "$out" '`**Coordinator**: on (mid)`'
+
+expansion coordinator:start "high priority bug" >/dev/null
+check "start 'high priority bug' stores high" test "$(cat "$state")" = high
+expansion coordinator:start "low high priority bug" >/dev/null
+check "start 'low high priority bug' stores low" test "$(cat "$state")" = low
+
+run_hook expansion '{"session_id":"s1","command_name":"coordinator:start","prompt":"/coordinator:start high fix it"}' >/dev/null
+check "start without command_args reads the tier from the prompt" test "$(cat "$state")" = high
+
+for content in "" "max"; do
+  printf '%s' "$content" > "$state"
+  out=$(submit "fix the bug" | context_of)
+  check "state '$content' reads as low on submit" contains "$out" '`**Coordinator**: on (low)`'
+  out=$(expansion coordinator:start | context_of)
+  check "state '$content' reads as low on start" contains "$out" 'tier is `low`'
+done
+
+printf mid > "$state"
+chmod 555 "$data_dir/sessions"
+out=$(expansion coordinator:start mid | context_of)
+check "start with the saved tier needs no write" contains "$out" "set **coordinator mode** on"
+out=$(expansion coordinator:start high)
+check "tier change that cannot write state warns the user" contains "$(printf '%s' "$out" | jq -r '.systemMessage')" "coordinator: could not change"
+out=$(printf '%s' "$out" | context_of)
+check "tier change that cannot write state says the tier did not change" contains "$out" 'tier is still `mid`'
+check "tier change that cannot write state keeps the previous footer" contains "$out" '`**Coordinator**: on (mid)`'
+check "tier change that cannot write state keeps the previous models" contains "$out" "$(models_of mid)"
+check "tier change that cannot write state keeps the tier" test "$(cat "$state")" = mid
+
+out=$(expansion coordinator:stop | context_of)
+check "stop that cannot remove state keeps the tier footer" contains "$out" '`**Coordinator**: on (mid)`'
+chmod 755 "$data_dir/sessions"
 
 echo
 [ "$failures" -eq 0 ] && echo "all passed" || { echo "$failures failed"; exit 1; }
