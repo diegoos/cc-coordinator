@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-12
+
 ### Added
 
 - When the hook cannot save or remove the session state, it warns the user and tells the model that the mode did not change.
@@ -26,7 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - When the `Agent` schema has no `effort`, the coordinator uses the harness default and names it in the notice. It no longer asks first.
 - Workers always use the `general-purpose` agent type. The coordinator no longer uses `Explore` for read-only searches.
 - The coordinator sends `SendMessage` to a worker that seems idle before it reports that worker as still running.
-- The eval commands in the README run the session under test on Opus. They do not run on Fable.
+- The eval commands in the README run the session under test on Opus, not on Fable.
 - The footer shows the tier while the mode is on: `**Coordinator**: on (low)`, `on (mid)`, or `on (high)`.
 - The one-line delegation notice names the worker model and the effort.
 - After a worker fails, the coordinator gives it a check to run, then raises the effort, then uses the next model of the tier. At the top of the tier it stops and reports.

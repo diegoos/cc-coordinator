@@ -1,7 +1,7 @@
 {
   "name": "coordinator",
   "description": "Coordinator mode: delegates work to background workers on Haiku, Sonnet, or Opus, by model tier.",
-  "version": "0.0.2",
+  "version": "0.1.0",
   "author": {
     "name": "diegoos"
   }
