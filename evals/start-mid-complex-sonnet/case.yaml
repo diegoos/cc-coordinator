@@ -1,0 +1,7 @@
+schema_version: "1.1"
+name: start-mid-complex-sonnet
+runs: 1
+expected_outcome: |
+  The coordinator mode turns on at the mid tier with /coordinator:start mid. The request is complex work and the mid tier has no Opus, so the agent delegates the investigation, the fix and the test run to exactly one background Sonnet worker with effort high, limits the Read section of the brief to cart.py and test_cart.py, ends its response with the on (mid) footer, and does not edit the files itself.
+context:
+  scaffold_script: place-files.sh

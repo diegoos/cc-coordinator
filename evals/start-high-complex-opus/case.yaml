@@ -1,0 +1,7 @@
+schema_version: "1.1"
+name: start-high-complex-opus
+runs: 1
+expected_outcome: |
+  The coordinator mode turns on at the high tier with /coordinator:start high. The request is complex work and the high tier has Opus, so the agent delegates the investigation, the fix and the test run to exactly one background Opus worker with effort medium, limits the Read section of the brief to cart.py and test_cart.py, ends its response with the on (high) footer, and does not edit the files itself.
+context:
+  scaffold_script: place-files.sh
